@@ -1,13 +1,18 @@
 import sqlite3
 import os
 
+# 此处为数据库名称
 DB_NAME = 'database.db'
 
+
+# 获取数据库连接，设置row_factory以便返回字典形式的结果
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
+
+# 初始化数据库，创建必要的表
 def init_db():
     conn = get_db_connection()
     conn.execute('''
@@ -47,6 +52,9 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+## 以下是数据库操作函数，供应用程序调用
+# 获取标签统计
 def get_lib_labels_stats():
     conn = get_db_connection()
     try:
@@ -55,6 +63,7 @@ def get_lib_labels_stats():
     finally:
         conn.close()
 
+# 获取库图片列表
 def get_lib_images(label=None):
     conn = get_db_connection()
     try:
@@ -64,6 +73,7 @@ def get_lib_images(label=None):
     finally:
         conn.close()
 
+# 获取所有库图片的基本信息
 def get_all_lib_images():
     """Returns all library images as a list of dictionaries with 'id', 'label', 'filename'."""
     conn = get_db_connection()
@@ -72,9 +82,7 @@ def get_all_lib_images():
     finally:
         conn.close()
 
-def get_image_path(filename, type_folder):
-    return os.path.join(type_folder, filename)
-
+# 添加图片记录到数据库，返回新插入的图片ID
 def add_image(filename, label, image_type, timestamp):
     conn = get_db_connection()
     try:
@@ -86,6 +94,7 @@ def add_image(filename, label, image_type, timestamp):
     finally:
         conn.close()
 
+# 获取查询图片的标签统计，包含未检测到的情况
 def get_query_labels_stats():
     conn = get_db_connection()
     try:
@@ -113,6 +122,7 @@ def get_query_labels_stats():
     finally:
         conn.close()
 
+# 获取查询图片列表，支持根据标签过滤，包括未检测到的特殊情况
 def get_query_images(label=None):
     conn = get_db_connection()
     try:
@@ -129,10 +139,6 @@ def get_query_images(label=None):
                 ORDER BY i.id DESC
              ''', (label,)).fetchall()
         else:
-             # If no label is specified (though usually handled by view logic), we might want all?
-             # The controller logic separates folder view vs image view.
-             # If this is called without label, maybe return empty or all?
-             # Let's assume this returns all for now if needed, or caller handles it.
              pass
 
         # Attach concatenated labels to images for display
@@ -147,6 +153,7 @@ def get_query_images(label=None):
     finally:
         conn.close()
 
+# 添加图片标签，支持多标签添加
 def add_image_labels(image_id, labels):
     conn = get_db_connection()
     try:
@@ -156,6 +163,7 @@ def add_image_labels(image_id, labels):
     finally:
         conn.close()
 
+# 获取图片类型
 def get_image_type(image_id):
     conn = get_db_connection()
     try:
@@ -164,6 +172,16 @@ def get_image_type(image_id):
     finally:
         conn.close()
 
+# 根据id获取图片信息
+def get_image_by_id(image_id):
+    conn = get_db_connection()
+    try:
+        row = conn.execute('SELECT * FROM images WHERE id = ?', (image_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+# 更新库图片标签
 def update_image_label_legacy(image_id, label):
     conn = get_db_connection()
     try:
@@ -172,6 +190,7 @@ def update_image_label_legacy(image_id, label):
     finally:
         conn.close()
 
+# 更新预测图片标签
 def update_image_labels_query(image_id, normalized_label_str, label_list):
     conn = get_db_connection()
     try:
@@ -183,6 +202,7 @@ def update_image_labels_query(image_id, normalized_label_str, label_list):
     finally:
         conn.close()
 
+# 获取所有查询图片及其标签，返回一个列表，每个元素包含图片信息和对应的标签列表
 def get_all_query_images_with_labels():
     conn = get_db_connection()
     try:
@@ -198,6 +218,7 @@ def get_all_query_images_with_labels():
     finally:
         conn.close()
 
+# 获取查询图片列表，支持根据标签过滤，包括未检测到的特殊情况，返回原始数据库行数据
 def get_query_images_by_label_raw(label):
     conn = get_db_connection()
     try:
@@ -214,6 +235,7 @@ def get_query_images_by_label_raw(label):
     finally:
         conn.close()
 
+# 删除图片记录
 def delete_image(image_id):
     conn = get_db_connection()
     try:
@@ -227,6 +249,7 @@ def delete_image(image_id):
     finally:
         conn.close()
 
+# 删除库文件夹中的所有图片记录
 def delete_lib_folder(label):
     conn = get_db_connection()
     try:
