@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-4 mt-3">
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="bi bi-images fs-1 text-primary mb-3"></i>
+                <h3 class="card-title">Library</h3>
+                <p class="card-text text-muted">Manage your known image database. Organize images into folders/labels.</p>
+                <a href="/lib" class="btn btn-primary">Go to Library</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body text-center">
+                <i class="bi bi-search fs-1 text-success mb-3"></i>
+                <h3 class="card-title">Query</h3>
+                <p class="card-text text-muted">Upload images or folders to check against the database.</p>
+                <a href="/query" class="btn btn-success">Go to Query</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
