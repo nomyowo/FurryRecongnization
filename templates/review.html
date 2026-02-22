@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Review Detection Results{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h2>Review Detection Results</h2>
+        <p class="text-muted">Please review and correct the detected labels before saving.</p>
+
+        <div id="resultsContainer">
+            {% for image_result in results %}
+            <div class="card mb-4 border-primary result-card" data-image-id="{{ image_result.image_id }}">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ image_result.filename }}</h5>
+                    <a href="/files/query/{{ image_result.filename }}" target="_blank" class="btn btn-sm btn-outline-secondary">View Original</a>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% for detection in image_result.detections %}
+                        <div class="col-md-6 col-lg-4 detection-item" data-id="{{ detection.id }}">
+                            <div class="card h-100">
+                                <div class="row g-0 h-100">
+                                    <div class="col-4 d-flex align-items-center justify-content-center bg-dark">
+                                        <img src="data:image/png;base64,{{ detection.crop_b64 }}" class="img-fluid rounded-start" alt="Detection Crop" style="max-height: 150px;">
+                                    </div>
+                                    <div class="col-8">
+                                        <div class="card-body">
+                                            <h6 class="card-title">Object #{{ detection.id + 1 }}</h6>
+
+                                            <div class="mb-2">
+                                                <label class="form-label small">Label</label>
+                                                <input type="text" class="form-control form-control-sm label-input" value="{{ detection.top_label }}">
+                                            </div>
+
+                                            <div class="mb-2">
+                                                <small class="text-muted d-block mb-1">Suggestions:</small>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    {% for pred in detection.predictions %}
+                                                    <button type="button" class="btn btn-outline-info btn-sm py-0 px-1 suggestion-btn" style="font-size: 0.75rem;" onclick="setLabel(this, '{{ pred.name }}')">
+                                                        {{ pred.name }} <span class="badge bg-secondary text-dark bg-opacity-25">{{ "%.2f"|format(pred.score) }}</span>
+                                                    </button>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="d-flex justify-content-end mt-4 mb-5">
+            <a href="/query" class="btn btn-secondary me-2">Cancel</a>
+            <button type="button" class="btn btn-success btn-lg" onclick="saveResults()">
+                <i class="bi bi-check-circle"></i> Save All Results
+            </button>
+        </div>
+
+        <form id="saveForm" action="/query/save_results" method="post" style="display: none;">
+            <input type="hidden" name="results" id="resultsInput">
+        </form>
+    </div>
+</div>
+
+<script>
+    function setLabel(btn, label) {
+        // Find the input in the same card-body
+        var cardBody = btn.closest('.card-body');
+        var input = cardBody.querySelector('.label-input');
+        input.value = label;
+    }
+
+    function saveResults() {
+        var data = [];
+        var cards = document.querySelectorAll('.result-card');
+
+        cards.forEach(function(card) {
+            var imageId = card.getAttribute('data-image-id');
+            var labels = [];
+
+            // Collect all detection labels for this image
+            var inputs = card.querySelectorAll('.label-input');
+            inputs.forEach(function(input) {
+                var val = input.value.trim();
+                if (val) {
+                    labels.push(val);
+                }
+            });
+
+            // Remove duplicates
+            labels = [...new Set(labels)];
+
+            if (labels.length > 0) {
+                data.push({
+                    "image_id": imageId,
+                    "labels": labels
+                });
+            }
+        });
+
+        if (data.length === 0) {
+            alert("No labels to save.");
+            return;
+        }
+
+        document.getElementById('resultsInput').value = JSON.stringify(data);
+        document.getElementById('saveForm').submit();
+    }
+</script>
+{% endblock %}
+

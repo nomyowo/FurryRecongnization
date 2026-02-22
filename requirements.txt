@@ -1,0 +1,10 @@
+werkzeug
+fastapi
+uvicorn
+python-multipart
+jinja2
+ultralytics
+torch
+torchvision
+numpy
+Pillow
