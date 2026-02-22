@@ -120,13 +120,17 @@ def upload_lib(
     return RedirectResponse(url="/lib", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@app.post("/lib/delete/{id}")
-def delete_lib_image(id: int, redirect_to: str = Form("/lib")):
-    filename = db.delete_image(id)
-    if filename:
-        file_path = os.path.join(UPLOAD_FOLDER_LIB, filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
+@app.post("/lib/delete_bulk")
+def delete_lib_images_bulk(
+    image_ids: List[int] = Form(...),
+    redirect_to: str = Form("/lib")
+):
+    for img_id in image_ids:
+        filename = db.delete_image(img_id)
+        if filename:
+            file_path = os.path.join(UPLOAD_FOLDER_LIB, filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
     # Re-initialize classifier after deletion
     init_classifier()
@@ -134,13 +138,16 @@ def delete_lib_image(id: int, redirect_to: str = Form("/lib")):
     return RedirectResponse(url=redirect_to, status_code=status.HTTP_303_SEE_OTHER)
 
 
-@app.post("/lib/delete_folder")
-def delete_lib_folder(label: str = Form(...)):
-    filenames = db.delete_lib_folder(label)
-    for filename in filenames:
-        file_path = os.path.join(UPLOAD_FOLDER_LIB, filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
+@app.post("/lib/delete_folders_bulk")
+def delete_lib_folders_bulk(
+    labels: List[str] = Form(...)
+):
+    for label in labels:
+        filenames = db.delete_lib_folder(label)
+        for filename in filenames:
+            file_path = os.path.join(UPLOAD_FOLDER_LIB, filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
     # Re-initialize classifier after folder deletion
     init_classifier()
