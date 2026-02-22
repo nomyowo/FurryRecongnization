@@ -8,40 +8,36 @@
     {% if current_label is none %}
     <!-- Query Labels / Folders View -->
     <div class="col-12 mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Query <small class="text-muted fs-6">Upload query images</small></h2>
-             <a href="/query/download_all" class="btn btn-outline-success">
-                <i class="bi bi-download"></i> Download All
-            </a>
-        </div>
+        <h2>预测图库</h2>
+        <p class="text-muted">点击文件夹预览图像</p>
+
 
         <!-- Upload Form -->
         <div class="card mb-4 border-success">
             <div class="card-header bg-success text-white">
-                Upload New Query Images
+                上传新的预览图象
             </div>
             <div class="card-body">
                  <form action="/query/upload" method="post" enctype="multipart/form-data" class="row g-3">
-                    <div class="col-md-4">
-                        <label for="files" class="form-label">Select Files</label>
+                    <div class="col-auto">
                         <input type="file" class="form-control" name="files" multiple>
                     </div>
-                    <div class="col-md-4">
-                        <label for="folder" class="form-label">Select Folder</label>
-                        <input type="file" class="form-control" name="files" webkitdirectory multiple>
+                    <div class="col-auto">
+                        <input type="text" class="form-control" name="label" placeholder="兽装名称（可选）">
                     </div>
-
-                    <div class="col-md-4">
-                         <label for="label" class="form-label">Label (optional)</label>
-                        <input type="text" class="form-control" name="label" placeholder="Labels (separated by , or ，)">
-                    </div>
-                    <div class="col-12 mt-3 text-end">
-                        <button type="submit" class="btn btn-success">Upload</button>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-success">上传</button>
                     </div>
                 </form>
             </div>
         </div>
 
+        <div class="d-flex justify-content-between align-items-center mb-3">
+             <p class="text-muted"></p>
+            <a href="/query/download_all" class="btn btn-outline-success">
+                <i class="bi bi-download"></i> 下载所有图像
+            </a>
+        </div>
         <div class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-4">
             {% if labels %}
                 {% for row in labels %}
@@ -51,7 +47,7 @@
                             <div class="card-body">
                                 <i class="bi bi-folder-fill folder-icon {% if row.label == '未检测到' %}text-warning{% else %}text-success{% endif %}"></i>
                                 <h5 class="card-title mt-2 text-truncate" title="{{ row.label }}">{{ row.label }}</h5>
-                                <p class="card-text text-muted small">{{ row.count }} items</p>
+                                <p class="card-text text-muted small">{{ row.count }} 张图像</p>
                             </div>
                         </div>
                     </a>
@@ -59,7 +55,7 @@
                 {% endfor %}
             {% else %}
                 <div class="col-12">
-                    <p class="alert alert-info">No query groups found. Upload images to create a group.</p>
+                    <p class="alert alert-info">暂无文件，请先上传图像文件</p>
                 </div>
             {% endif %}
         </div>
@@ -72,21 +68,21 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>
                     <a href="/query" class="text-decoration-none me-2"><i class="bi bi-arrow-left-circle text-success"></i></a>
-                    Query Group: <span class="text-success">{{ current_label }}</span>
+                    名称： <span class="text-success">{{ current_label }}</span>
                 </h2>
                 <div>
                      <button type="submit" class="btn btn-primary me-2" id="detectBtn" disabled>
-                        <i class="bi bi-magic"></i> Auto Detect
+                        <i class="bi bi-magic"></i> 自动检测
                     </button>
                     <a href="/query/download_label?label={{ current_label }}" class="btn btn-outline-success">
-                        <i class="bi bi-download"></i> Download Folder
+                        <i class="bi bi-download"></i> 下载所有图片
                     </a>
                 </div>
             </div>
 
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" id="selectAll">
-                <label class="form-check-label" for="selectAll">Select All</label>
+                <label class="form-check-label" for="selectAll">全选</label>
             </div>
 
             <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-4">
@@ -101,10 +97,11 @@
                                 <img src="/files/query/{{ image.filename }}" class="card-img-top image-card-img" alt="{{ image.filename }}">
                             </a>
                             <div class="card-body p-2">
-                                <p class="card-text text-truncate small mb-1" title="{{ image.filename }}">{{ image.filename }}</p>
-                                <small class="text-muted d-block mb-2">{{ image.timestamp }}</small>
+                                <p class="card-text text-truncate small mb-1" title="{{ image.filename }}">文件名：{{ image.filename }}</p>
+                                <small class="text-muted d-block mb-2 text-truncate">上传时间：{{ image.timestamp }}</small>
                                 <!-- Placeholder for layout, actual update form is outside -->
                                 <div class="input-group input-group-sm">
+                                    <p class="card-text text-truncate small mb-1" >名称：</p>
                                     <input type="text" class="form-control" form="updateLabelForm{{ image.id }}" name="label" value="{{ image.label if image.label else '' }}" placeholder="Label">
                                     <input type="hidden" form="updateLabelForm{{ image.id }}" name="redirect_to" value="/query?label={{ current_label }}">
                                     <button class="btn btn-outline-secondary" type="submit" form="updateLabelForm{{ image.id }}" title="Update Label"><i class="bi bi-pencil-square"></i></button>
@@ -115,7 +112,7 @@
                     {% endfor %}
                 {% else %}
                     <div class="col-12">
-                        <p class="alert alert-warning">No images found for this label.</p>
+                        <p class="alert alert-warning">该分类无图像</p>
                     </div>
                 {% endif %}
             </div>
