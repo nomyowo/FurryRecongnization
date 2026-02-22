@@ -1,4 +1,5 @@
 import sqlite3
+import os
 
 DB_NAME = 'database.db'
 
@@ -62,6 +63,17 @@ def get_lib_images(label=None):
         return conn.execute('SELECT * FROM images WHERE type = ? ORDER BY id DESC', ('lib',)).fetchall()
     finally:
         conn.close()
+
+def get_all_lib_images():
+    """Returns all library images as a list of dictionaries with 'id', 'label', 'filename'."""
+    conn = get_db_connection()
+    try:
+        return conn.execute('SELECT id, label, filename FROM images WHERE type = ?', ('lib',)).fetchall()
+    finally:
+        conn.close()
+
+def get_image_path(filename, type_folder):
+    return os.path.join(type_folder, filename)
 
 def add_image(filename, label, image_type, timestamp):
     conn = get_db_connection()
@@ -199,5 +211,33 @@ def get_query_images_by_label_raw(label):
                 WHERE i.type = 'query' AND il.label = ?
             ''', (label,)).fetchall()
         return images
+    finally:
+        conn.close()
+
+def delete_image(image_id):
+    conn = get_db_connection()
+    try:
+        # Get filename to return it for file deletion
+        row = conn.execute('SELECT filename FROM images WHERE id = ?', (image_id,)).fetchone()
+        if row:
+            conn.execute('DELETE FROM images WHERE id = ?', (image_id,))
+            conn.commit()
+            return row['filename']
+        return None
+    finally:
+        conn.close()
+
+def delete_lib_folder(label):
+    conn = get_db_connection()
+    try:
+        # Get all filenames for this label
+        rows = conn.execute('SELECT filename FROM images WHERE type = ? AND label = ?', ('lib', label)).fetchall()
+        filenames = [row['filename'] for row in rows]
+
+        if filenames:
+            conn.execute('DELETE FROM images WHERE type = ? AND label = ?', ('lib', label))
+            conn.commit()
+
+        return filenames
     finally:
         conn.close()

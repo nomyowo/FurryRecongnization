@@ -3,6 +3,7 @@ import shutil
 import sqlite3
 from datetime import datetime
 from typing import List, Optional
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, status, Query
 from fastapi.responses import RedirectResponse, FileResponse
@@ -10,15 +11,22 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from werkzeug.utils import secure_filename
 import db
+from classifier import FurryClassifier
 import zipfile
 import tempfile
+import base64
+from io import BytesIO
+from PIL import Image
+import numpy as np
 
 
-# TODO: 2、将furry图片检查加入系统
-#       3、加入标签选择功能
+
+# TODO: 3、加入标签选择功能
 #       4、加入标签查找
 #       5、加入登录、权限功能（加入多线程）
 app = FastAPI()
+
+classifier: Optional[FurryClassifier] = None
 
 # Configuration
 UPLOAD_FOLDER_LIB = 'lib'
@@ -39,9 +47,31 @@ def allowed_file(filename: str):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+def init_classifier():
+    global classifier
+    try:
+        lib_imgs = db.get_all_lib_images()
+        # Convert to list of (label, path)
+        lib_data = []
+        for img in lib_imgs:
+            path = Path(UPLOAD_FOLDER_LIB) / img['filename']
+            if path.exists():
+                lib_data.append((img['label'], path))
+
+        if lib_data:
+            print(f"Initializing classifier with {len(lib_data)} images...")
+            classifier = FurryClassifier(lib_data, backend="yolo")
+        else:
+            print("No library images found. Classifier not initialized.")
+            classifier = None
+    except Exception as e:
+        print(f"Failed to initialize classifier: {e}")
+        classifier = None
+
 @app.on_event("startup")
 def startup_event():
     db.init_db()
+    init_classifier()
 
 @app.get("/")
 def index(request: Request):
@@ -83,6 +113,37 @@ def upload_lib(
             # Single label insert for lib
             db.add_image(save_name, label, 'lib', str(datetime.now()))
             # No image_labels insertion for lib
+
+    # Re-initialize classifier after upload
+    init_classifier()
+
+    return RedirectResponse(url="/lib", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/lib/delete/{id}")
+def delete_lib_image(id: int, redirect_to: str = Form("/lib")):
+    filename = db.delete_image(id)
+    if filename:
+        file_path = os.path.join(UPLOAD_FOLDER_LIB, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    # Re-initialize classifier after deletion
+    init_classifier()
+
+    return RedirectResponse(url=redirect_to, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/lib/delete_folder")
+def delete_lib_folder(label: str = Form(...)):
+    filenames = db.delete_lib_folder(label)
+    for filename in filenames:
+        file_path = os.path.join(UPLOAD_FOLDER_LIB, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    # Re-initialize classifier after folder deletion
+    init_classifier()
 
     return RedirectResponse(url="/lib", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -154,6 +215,108 @@ def update_label(
         db.update_image_labels_query(id, normalized_label_str, label_list)
 
     return RedirectResponse(url=redirect_to, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/query/detect")
+def detect_query_images(
+    request: Request,
+    image_ids: List[int] = Form(...),
+):
+    global classifier
+
+    if not classifier:
+        # Try to initialize if not ready (e.g. if startup failed or cleared)
+        init_classifier()
+
+    if not classifier:
+        return templates.TemplateResponse("error.html", {"request": request, "message": "Classifier not initialized. Please ensure there are images in the library."})
+
+    results = []
+    
+    conn = db.get_db_connection()
+    try:
+        for img_id in image_ids:
+            row = conn.execute("SELECT * FROM images WHERE id = ?", (img_id,)).fetchone()
+            if not row:
+                continue
+
+            filename = row['filename']
+            file_path = Path(UPLOAD_FOLDER_QUERY) / filename
+            if not file_path.exists():
+                continue
+
+            # Run prediction
+            try:
+                preds = classifier.predict(file_path, topk=5)
+            except Exception as e:
+                print(f"Prediction failed for {filename}: {e}")
+                continue
+
+            # Process predictions for display
+            detections = []
+            image_array = np.array(Image.open(file_path).convert("RGB"))
+
+            for i, p in enumerate(preds):
+                # Extract crop for display
+                mask = p.get("_mask")
+                if mask is not None:
+                    # Crop image using mask bbox
+                    from classifier import crop_with_mask, to_uint8_mask
+                    cropped, _ = crop_with_mask(image_array, mask)
+
+                    # Convert crop to base64
+                    pil_img = Image.fromarray(cropped)
+                    buff = BytesIO()
+                    pil_img.save(buff, format="PNG")
+                    img_str = base64.b64encode(buff.getvalue()).decode("utf-8")
+
+                    detections.append({
+                        "id": i,
+                        "crop_b64": img_str,
+                        "predictions": p["predictions"], # list of {name, score}
+                        "top_label": p["predictions"][0]["name"] if p["predictions"] else ""
+                    })
+
+            if detections:
+                results.append({
+                    "image_id": img_id,
+                    "filename": filename,
+                    "detections": detections
+                })
+
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse("review.html", {"request": request, "results": results})
+
+@app.post("/query/save_results")
+def save_query_results(
+    request: Request,
+    results: str = Form(...), # JSON string of results
+):
+    import json
+    data = json.loads(results)
+
+    conn = db.get_db_connection()
+    try:
+        for item in data:
+            image_id = item.get("image_id")
+            labels = item.get("labels", [])
+
+            if not image_id or not labels:
+                continue
+
+            # Normalize labels
+            label_str = ",".join(labels)
+
+            # Update DB using existing function logic (but we need to do it manually here or use db helpers)
+            # Using db helper
+            db.update_image_labels_query(image_id, label_str.replace(',', '，'), labels)
+
+    finally:
+        conn.close()
+
+    return RedirectResponse(url="/query", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/query/download_all")
