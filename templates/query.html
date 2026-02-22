@@ -8,7 +8,12 @@
     {% if current_label is none %}
     <!-- Query Labels / Folders View -->
     <div class="col-12 mb-4">
-        <h2>Query <small class="text-muted fs-6">Upload query images</small></h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>Query <small class="text-muted fs-6">Upload query images</small></h2>
+             <a href="/query/download_all" class="btn btn-outline-success">
+                <i class="bi bi-download"></i> Download All
+            </a>
+        </div>
 
         <!-- Upload Form -->
         <div class="card mb-4 border-success">
@@ -28,7 +33,7 @@
 
                     <div class="col-md-4">
                          <label for="label" class="form-label">Label (optional)</label>
-                        <input type="text" class="form-control" name="label" placeholder="Project Name / Label">
+                        <input type="text" class="form-control" name="label" placeholder="Labels (separated by , or ，)">
                     </div>
                     <div class="col-12 mt-3 text-end">
                         <button type="submit" class="btn btn-success">Upload</button>
@@ -68,6 +73,9 @@
                 <a href="/query" class="text-decoration-none me-2"><i class="bi bi-arrow-left-circle text-success"></i></a>
                 Query Group: <span class="text-success">{{ current_label }}</span>
             </h2>
+            <a href="/query/download_label?label={{ current_label }}" class="btn btn-outline-success">
+                <i class="bi bi-download"></i> Download Folder
+            </a>
         </div>
 
         <div class="row row-cols-2 row-cols-md-4 row-cols-lg-5 g-4">
