@@ -13,6 +13,12 @@ import db
 import zipfile
 import tempfile
 
+
+# TODO: 1、将数据库连接文件全部保存到db文件夹中，实现多种数据库支持
+#       2、将furry图片检查加入系统
+#       3、加入标签选择功能
+#       4、加入标签查找
+#       5、加入登录、权限功能（加入多线程）
 app = FastAPI()
 
 # Configuration
