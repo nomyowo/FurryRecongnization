@@ -135,7 +135,7 @@ def upload_query(
 @app.post("/update_label/{id}")
 def update_label(
     id: int,
-    label: str = Form(...),
+    label: Optional[str] = Form(None),
     redirect_to: str = Form("/"),
 ):
     # Check image type to decide behavior
@@ -146,10 +146,10 @@ def update_label(
     else:
         # Multi-label update for query
         # Normalize for legacy column
-        normalized_label_str = label.replace(',', '，')
+        normalized_label_str = label.replace(',', '，') if label is not None else ''
 
         # Split by both comma types
-        label_list = [l.strip() for l in label.replace('，', ',').split(',') if l.strip()]
+        label_list = [l.strip() for l in (label or '').replace('，', ',').split(',') if l.strip()]
 
         db.update_image_labels_query(id, normalized_label_str, label_list)
 
