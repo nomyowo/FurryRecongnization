@@ -57,7 +57,7 @@
 
         <div class="d-flex justify-content-end mt-4 mb-5">
             <a href="/query" class="btn btn-secondary me-2">Cancel</a>
-            <button type="button" class="btn btn-success btn-lg" onclick="saveResults()">
+            <button type="button" class="btn btn-success btn-lg" id="saveBtn" onclick="saveResults()">
                 <i class="bi bi-check-circle"></i> Save All Results
             </button>
         </div>
@@ -77,6 +77,7 @@
     }
 
     function saveResults() {
+        document.getElementById('saveBtn').disabled = true;
         var data = [];
         var cards = document.querySelectorAll('.result-card');
 
@@ -110,6 +111,7 @@
         }
 
         document.getElementById('resultsInput').value = JSON.stringify(data);
+        showLoading();
         document.getElementById('saveForm').submit();
     }
 </script>

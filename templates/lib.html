@@ -189,6 +189,8 @@
             function submitBulkDelete() {
                 if (!confirm('Delete selected images?')) return;
 
+                document.getElementById('deleteImageBtn').disabled = true;
+
                 var form = document.getElementById('bulkDeleteForm');
                 var inputsContainer = document.getElementById('bulkDeleteInputs');
                 inputsContainer.innerHTML = '';
@@ -202,6 +204,7 @@
                     inputsContainer.appendChild(input);
                 });
 
+                showLoading();
                 form.submit();
             }
         </script>
