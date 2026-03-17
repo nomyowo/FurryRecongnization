@@ -1,5 +1,6 @@
 import os
 import shutil
+import uuid
 from datetime import datetime
 from typing import List, Optional
 from pathlib import Path
@@ -31,15 +32,18 @@ classifier: Optional[FurryClassifier] = None
 # 文件上传配置
 UPLOAD_FOLDER_LIB = 'lib'
 UPLOAD_FOLDER_QUERY = 'query'
+UPLOAD_FOLDER_TEMP = 'temp'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 # 确保上传目录存在
 os.makedirs(UPLOAD_FOLDER_LIB, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER_QUERY, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_TEMP, exist_ok=True)
 
 # 挂载静态文件目录
 app.mount("/files/lib", StaticFiles(directory=UPLOAD_FOLDER_LIB), name="lib_files")
 app.mount("/files/query", StaticFiles(directory=UPLOAD_FOLDER_QUERY), name="query_files")
+app.mount("/files/temp", StaticFiles(directory=UPLOAD_FOLDER_TEMP), name="temp_files")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -272,7 +276,7 @@ def upload_query(
 
             # 处理多标签，存储到 image_labels 表
             if label:
-                # 中英文分割符处理
+                # 中英文分隔符处理
                 label_list = [l.strip() for l in label.replace('，', ',').split(',') if l.strip()]
                 db.add_image_labels(image_id, label_list)
 
@@ -411,6 +415,132 @@ def download_query_label(label: str = Query(...)):
             temp_zip.name,
             media_type='application/zip',
             filename=f"query_images_{filename_label}_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+        )
+    except Exception as e:
+        if os.path.exists(temp_zip.name):
+            os.remove(temp_zip.name)
+        raise e
+
+
+@app.get("/target")
+def target_search(request: Request):
+    return templates.TemplateResponse("target_search.html", {"request": request})
+
+
+@app.post("/target/search")
+async def target_search_process(
+    request: Request,
+    files: List[UploadFile] = File(...),
+    target_label: str = Form(...),
+):
+    target_label = target_label.strip()
+    global classifier
+    if not classifier:
+        init_classifier()
+        if not classifier:
+             return templates.TemplateResponse("error.html", {"request": request, "message": "Classifier not initialized. Please ensure there are images in the library."})
+
+    batch_id = str(uuid.uuid4())
+    batch_dir = os.path.join(UPLOAD_FOLDER_TEMP, batch_id)
+    os.makedirs(batch_dir, exist_ok=True)
+
+    high_conf_images = []
+    other_images = []
+
+    for file in files:
+        if file.filename and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            save_path = os.path.join(batch_dir, filename)
+
+            with open(save_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+
+            # Predict
+            try:
+                # predict expects a Path object
+                preds = classifier.predict(Path(save_path), topk=5)
+            except Exception as e:
+                print(f"Prediction failed for {filename}: {e}")
+                # If prediction fails, treat as 'other' without prediction details
+                other_images.append({
+                    "filename": filename,
+                    "top_prediction": "Error",
+                    "top_score": 0.0
+                })
+                continue
+
+            max_score_for_target = 0.0
+            top_prediction_name = None
+            top_prediction_score = 0.0
+
+            # Check all detections in the image
+            for p in preds:
+                predictions = p.get("predictions", [])
+                if predictions:
+                    # Update global top prediction for this image across all detections
+                    if predictions[0]["score"] > top_prediction_score:
+                        top_prediction_score = predictions[0]["score"]
+                        top_prediction_name = predictions[0]["name"]
+
+                    for pred in predictions:
+                        if pred["name"] == target_label:
+                            if pred["score"] > max_score_for_target:
+                                max_score_for_target = pred["score"]
+
+            if max_score_for_target >= 0.85:
+                high_conf_images.append({
+                    "filename": filename,
+                    "score": max_score_for_target,
+                    "target_score": max_score_for_target,
+                    "top_prediction": top_prediction_name,
+                    "top_score": top_prediction_score
+                })
+            else:
+                other_images.append({
+                    "filename": filename,
+                    "target_score": max_score_for_target,
+                    "top_prediction": top_prediction_name,
+                    "top_score": top_prediction_score
+                })
+
+    # Sort results by target_score descending
+    high_conf_images.sort(key=lambda x: x["target_score"], reverse=True)
+    other_images.sort(key=lambda x: x["target_score"], reverse=True)
+
+    return templates.TemplateResponse("target_result.html", {
+        "request": request,
+        "batch_id": batch_id,
+        "target_label": target_label,
+        "high_conf_images": high_conf_images,
+        "other_images": other_images
+    })
+
+
+@app.post("/target/download")
+def target_download(
+    batch_id: str = Form(...),
+    selected_files: List[str] = Form(...)
+):
+    batch_dir = os.path.join(UPLOAD_FOLDER_TEMP, batch_id)
+    if not os.path.exists(batch_dir):
+        # Handle expired or invalid batch
+        return RedirectResponse(url="/target", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Create a temporary file for zip
+    temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    temp_zip.close()
+
+    try:
+        with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for filename in selected_files:
+                file_path = os.path.join(batch_dir, filename)
+                if os.path.exists(file_path):
+                    zf.write(file_path, arcname=filename)
+
+        return FileResponse(
+            temp_zip.name,
+            media_type='application/zip',
+            filename=f"search_results_{batch_id[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
         )
     except Exception as e:
         if os.path.exists(temp_zip.name):
