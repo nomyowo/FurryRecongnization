@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>检索结果: <span class="text-warning">{{ target_label }}</span></h2>
+        <div>
+            <a href="/target" class="btn btn-secondary">返回重新搜索</a>
+        </div>
+    </div>
+
+    <form action="/target/download" method="post" id="downloadForm">
+        <input type="hidden" name="batch_id" value="{{ batch_id }}">
+
+        <!-- Threshold Control -->
+        <div class="card mb-4 shadow-sm bg-light">
+            <div class="card-body d-flex align-items-center">
+                <label for="thresholdRange" class="form-label me-3 mb-0 fw-bold">置信度阈值 (Confidence Threshold):</label>
+                <input type="range" class="form-range flex-grow-1 me-3" id="thresholdRange" min="0.7" max="1" step="0.01" value="0.85">
+                <span class="badge bg-primary fs-6" style="width: 60px;" id="thresholdBadge">0.85</span>
+            </div>
+        </div>
+
+        <!-- High Confidence Section -->
+        <div class="card mb-4 border-success">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">高置信度匹配 (<span id="highCountDisplay">{{ high_conf_images|length }}</span> 张)</h5>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAllHigh">
+                    <label class="form-check-label text-white" for="selectAllHigh">全选</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-3" id="highConfGrid">
+                    {% for img in high_conf_images %}
+                    <div class="col image-card-col"
+                         data-target-score="{{ img.target_score }}"
+                         data-top-pred="{{ img.top_prediction }}"
+                         data-top-score="{{ img.top_score }}">
+                        <div class="card h-100 shadow-sm matched-card">
+                            <div class="position-absolute top-0 start-0 p-2" style="z-index: 10;">
+                                <input class="form-check-input image-checkbox high-checkbox" type="checkbox" name="selected_files" value="{{ img.filename }}">
+                            </div>
+                            <img src="/files/temp/{{ batch_id }}/{{ img.filename }}" class="card-img-top" style="height: 150px; object-fit: cover;">
+                            <div class="card-body p-2">
+                                <p class="card-text small text-truncate">{{ img.filename }}</p>
+                                <!-- High Conf Info -->
+                                <div class="info-high">
+                                    <span class="badge bg-success">{{ "%.2f"|format(img.target_score) }}</span>
+                                </div>
+                                <!-- Low Conf Info (Hidden initially) -->
+                                <div class="info-other" style="display: none;">
+                                    {% if img.top_prediction %}
+                                        <small class="d-block text-muted">识别为: {{ img.top_prediction }} ({{ "%.2f"|format(img.top_score) }})</small>
+                                    {% else %}
+                                        <small class="d-block text-muted">未检测到目标</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div id="highEmpty" class="text-center text-muted p-3" style="display:{% if high_conf_images %}none{% else %}block{% endif %};">
+                    未找到符合置信度的图像
+                </div>
+            </div>
+        </div>
+
+        <!-- Low Confidence / Others Section -->
+        <div class="card mb-4 border-secondary">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">其他图像 (<span id="otherCountDisplay">{{ other_images|length }}</span> 张)</h5>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="selectAllOther">
+                    <label class="form-check-label text-white" for="selectAllOther">全选</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-3" id="otherGrid">
+                    {% for img in other_images %}
+                    <div class="col image-card-col"
+                         data-target-score="{{ img.target_score }}"
+                         data-top-pred="{{ img.top_prediction }}"
+                         data-top-score="{{ img.top_score }}">
+                        <div class="card h-100 shadow-sm">
+                            <div class="position-absolute top-0 start-0 p-2" style="z-index: 10;">
+                                <input class="form-check-input image-checkbox other-checkbox" type="checkbox" name="selected_files" value="{{ img.filename }}">
+                            </div>
+                            <img src="/files/temp/{{ batch_id }}/{{ img.filename }}" class="card-img-top" style="height: 150px; object-fit: cover;">
+                            <div class="card-body p-2">
+                                <p class="card-text small text-truncate">{{ img.filename }}</p>
+                                <!-- High Conf Info (Hidden initially) -->
+                                <div class="info-high" style="display: none;">
+                                    <span class="badge bg-success">{{ "%.2f"|format(img.target_score) }}</span>
+                                </div>
+                                <!-- Low Conf Info -->
+                                <div class="info-other">
+                                    {% if img.top_prediction %}
+                                        <small class="d-block text-muted">识别为: {{ img.top_prediction }} ({{ "%.2f"|format(img.top_score) }})</small>
+                                    {% else %}
+                                        <small class="d-block text-muted">未检测到目标</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div id="otherEmpty" class="text-center text-muted p-3" style="display: {% if other_images %}none{% else %}block{% endif %};">
+                    无其他图像
+                </div>
+            </div>
+        </div>
+
+        <div class="fixed-bottom bg-white border-top p-3 shadow text-end" style="z-index: 1050;"> <!-- Ensure z-index is high enough -->
+            <span class="me-3">已选: <span id="selectedCount">0</span> 张</span>
+            <button type="submit" class="btn btn-warning btn-lg" id="downloadBtn" disabled>
+                <i class="bi bi-download"></i> 下载选中图像
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // State
+    let allCards = [];
+
+    // Elements
+    const thresholdRange = document.getElementById('thresholdRange');
+    const thresholdBadge = document.getElementById('thresholdBadge');
+
+    const highConfGrid = document.getElementById('highConfGrid');
+    const otherGrid = document.getElementById('otherGrid');
+
+    const highCountDisplay = document.getElementById('highCountDisplay');
+    const otherCountDisplay = document.getElementById('otherCountDisplay');
+
+    const highEmpty = document.getElementById('highEmpty');
+    const otherEmpty = document.getElementById('otherEmpty');
+
+    const selectAllHigh = document.getElementById('selectAllHigh');
+    const selectAllOther = document.getElementById('selectAllOther');
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        // Gather all existing card elements into an array for easy manipulation
+        // Note: querySelectorAll returns a static NodeList if we not re-query, but appending moves elements.
+        // We want a stable reference to the underlying DOM elements regardless of where they live.
+        const cardsStartHigh = Array.from(highConfGrid.querySelectorAll('.image-card-col'));
+        const cardsStartOther = Array.from(otherGrid.querySelectorAll('.image-card-col'));
+
+        allCards = [...cardsStartHigh, ...cardsStartOther];
+
+        updateSelectionCount();
+    });
+
+    // Threshold Change
+    thresholdRange.addEventListener('input', (e) => {
+        const threshold = parseFloat(e.target.value);
+        thresholdBadge.innerText = threshold.toFixed(2);
+        applyFilter(threshold);
+    });
+
+    function applyFilter(threshold) {
+        const highFragment = document.createDocumentFragment();
+        const otherFragment = document.createDocumentFragment();
+
+        // Reset counts
+        let highCount = 0;
+        let otherCount = 0;
+
+        allCards.forEach(card => {
+            const score = parseFloat(card.dataset.targetScore);
+            const isHigh = score >= threshold;
+
+            // Update visible content inside card
+            const infoHigh = card.querySelector('.info-high');
+            const infoOther = card.querySelector('.info-other');
+            const checkbox = card.querySelector('.image-checkbox');
+
+            if (isHigh) {
+                highCount++;
+                infoHigh.style.display = 'block';
+                infoOther.style.display = 'none';
+
+                // Update checkbox class to match section
+                checkbox.classList.add('high-checkbox');
+                checkbox.classList.remove('other-checkbox');
+
+                highFragment.appendChild(card);
+            } else {
+                otherCount++;
+                infoHigh.style.display = 'none';
+                infoOther.style.display = 'block';
+
+                // Update checkbox class to match section
+                checkbox.classList.add('other-checkbox');
+                checkbox.classList.remove('high-checkbox');
+
+                otherFragment.appendChild(card);
+            }
+        });
+
+        // Batch DOM updates
+        highConfGrid.appendChild(highFragment);
+        otherGrid.appendChild(otherFragment);
+
+        // Update UI Counts
+        highCountDisplay.innerText = highCount;
+        otherCountDisplay.innerText = otherCount;
+
+        // Toggle Empty States
+        highEmpty.style.display = highCount === 0 ? 'block' : 'none';
+        otherEmpty.style.display = otherCount === 0 ? 'block' : 'none';
+
+        // Update Select All checkbox state (unchecked if list changes usually)
+        // Or keep them as is, but their meaning changes. Let's uncheck select-alls to avoid confusion
+        // unless all are checked.
+        updateSelectAllState(selectAllHigh, 'high');
+        updateSelectAllState(selectAllOther, 'other');
+    }
+
+    // Select All Logic
+    selectAllHigh.addEventListener('change', (e) => toggleSection('high', e.target.checked));
+    selectAllOther.addEventListener('change', (e) => toggleSection('other', e.target.checked));
+
+    function toggleSection(type, checked) {
+        const container = type === 'high' ? highConfGrid : otherGrid;
+        const checkboxes = container.querySelectorAll('.image-checkbox');
+        checkboxes.forEach(cb => cb.checked = checked);
+        updateSelectionCount();
+    }
+
+    // Checkbox change listener (via delegation)
+    document.getElementById('downloadForm').addEventListener('change', (e) => {
+        if (e.target.classList.contains('image-checkbox')) {
+            updateSelectionCount();
+            // Also update the "Select All" checkbox state for that section
+            if (e.target.classList.contains('high-checkbox')) updateSelectAllState(selectAllHigh, 'high');
+            if (e.target.classList.contains('other-checkbox')) updateSelectAllState(selectAllOther, 'other');
+        }
+    });
+
+    function updateSelectAllState(selectAllEl, type) {
+        const container = type === 'high' ? highConfGrid : otherGrid;
+        const checkboxes = container.querySelectorAll('.image-checkbox');
+        if (checkboxes.length === 0) {
+            selectAllEl.checked = false;
+            selectAllEl.disabled = true;
+        } else {
+            selectAllEl.disabled = false;
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            selectAllEl.checked = allChecked;
+        }
+    }
+
+    function updateSelectionCount() {
+        const count = document.querySelectorAll('.image-checkbox:checked').length;
+        document.getElementById('selectedCount').innerText = count;
+        document.getElementById('downloadBtn').disabled = count === 0;
+    }
+
+    // Download Handler
+    document.getElementById('downloadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const overlay = document.getElementById('loadingOverlay');
+        const btn = document.getElementById('downloadBtn');
+        const originalBtnText = btn.innerHTML;
+
+        // Show loading state
+        if(overlay) overlay.style.display = 'flex';
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 打包中...';
+
+        try {
+            const formData = new FormData(this);
+            const response = await fetch(this.action, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                // Extract filename
+                let filename = 'download.zip';
+                const disposition = response.headers.get('Content-Disposition');
+                if (disposition && disposition.indexOf('filename=') !== -1) {
+                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } else {
+                alert('下载失败');
+            }
+        } catch (error) {
+            console.error('Download error:', error);
+            alert('下载出错');
+        } finally {
+            if(overlay) overlay.style.display = 'none';
+            btn.innerHTML = originalBtnText;
+            updateSelectionCount();
+        }
+    });
+
+</script>
+<style>
+    body { padding-bottom: 80px; }
+    .image-card-col { transition: all 0.3s ease; }
+</style>
+{% endblock %}
+

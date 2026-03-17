@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Target Search{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-warning text-dark">
+                <h4 class="mb-0">特定目标检索</h4>
+            </div>
+            <div class="card-body">
+                 <form action="/target/search" method="post" enctype="multipart/form-data" id="searchForm">
+                    <div class="mb-3">
+                        <label for="target_label" class="form-label">目标名称 (Target Name)</label>
+                        <input type="text" class="form-control" id="target_label" name="target_label" required placeholder="请输入要查找的兽装/角色名称">
+                    </div>
+                    <div class="mb-3">
+                        <label for="files" class="form-label">上传图片 (Upload Images)</label>
+                        <input type="file" class="form-control" id="files" name="files" multiple required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-search"></i> 开始检索
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('searchForm').addEventListener('submit', function(event) {
+        if (this.checkValidity()) {
+             document.getElementById('loadingOverlay').style.display = 'flex';
+        } else {
+            // Let the browser handle displaying validation errors
+            // event.preventDefault() is NOT called so browser validation UI shows up
+        }
+    });
+</script>
+{% endblock %}
+
