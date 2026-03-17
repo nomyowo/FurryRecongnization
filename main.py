@@ -175,6 +175,76 @@ def view_query(request: Request, label: Optional[str] = Query(None)):
     return templates.TemplateResponse("query.html", {"request": request, "images": images, "labels": labels, "current_label": label})
 
 
+# 核心检测逻辑
+def core_detect_images(image_ids: List[int]):
+    global classifier
+
+    if not classifier:
+        # Try to initialize if not ready (e.g. if startup failed or cleared)
+        init_classifier()
+
+    if not classifier:
+        return None # Classifier not available
+
+    # 结果列表
+    results = []
+
+    for img_id in image_ids:
+        row = db.get_image_by_id(img_id)
+        if not row:
+            continue
+
+        filename = row['filename']
+        file_path = Path(UPLOAD_FOLDER_QUERY) / filename
+        if not file_path.exists():
+            continue
+
+        # 进行预测
+        try:
+            preds = classifier.predict(file_path, topk=5)
+        except Exception as e:
+            print(f"Prediction failed for {filename}: {e}")
+            continue
+
+        # 构建检测结果
+        detections = []
+        try:
+            image_array = np.array(Image.open(file_path).convert("RGB"))
+        except Exception as e:
+            print(f"Error opening image {filename}: {e}")
+            continue
+
+        for i, p in enumerate(preds):
+            # 每个预测结果包含一个_mask字段，表示检测到的区域掩码
+            mask = p.get("_mask")
+            if mask is not None:
+                # 使用 classifier.py 中的 crop_with_mask 函数裁剪出检测区域的图像
+                from classifier import crop_with_mask, to_uint8_mask
+                cropped, _ = crop_with_mask(image_array, mask)
+
+                # 将裁剪后的图像转换为 base64 编码的字符串，方便在前端直接显示
+                pil_img = Image.fromarray(cropped)
+                buff = BytesIO()
+                pil_img.save(buff, format="PNG")
+                img_str = base64.b64encode(buff.getvalue()).decode("utf-8")
+
+                detections.append({
+                    "id": i,
+                    "crop_b64": img_str,
+                    "predictions": p["predictions"], # list of {name, score}
+                    "top_label": p["predictions"][0]["name"] if p["predictions"] else ""
+                })
+
+        if detections:
+            results.append({
+                "image_id": img_id,
+                "filename": filename,
+                "detections": detections
+            })
+
+    return results
+
+
 # 上传推理图片
 @app.post("/query/upload")
 def upload_query(
@@ -182,6 +252,7 @@ def upload_query(
     files: List[UploadFile] = File(...),
     label: Optional[str] = Form(""),
 ):
+    uploaded_ids = []
     for file in files:
         if file.filename and allowed_file(file.filename):
             filename = secure_filename(file.filename)
@@ -197,12 +268,20 @@ def upload_query(
 
             # 插入数据库，获取新图片ID
             image_id = db.add_image(save_name, normalized_label_str, 'query', str(datetime.now()))
+            uploaded_ids.append(image_id)
 
             # 处理多标签，存储到 image_labels 表
             if label:
                 # 中英文分割符处理
                 label_list = [l.strip() for l in label.replace('，', ',').split(',') if l.strip()]
                 db.add_image_labels(image_id, label_list)
+
+    # 尝试自动检测
+    if uploaded_ids:
+        results = core_detect_images(uploaded_ids)
+        if results is not None:
+             return templates.TemplateResponse("review.html", {"request": request, "results": results})
+        # 如果classifier未初始化，或者没有结果，则返回query页面
 
     return RedirectResponse(url="/query", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -238,66 +317,11 @@ def detect_query_images(
     request: Request,
     image_ids: List[int] = Form(...),
 ):
-    global classifier
+    results = core_detect_images(image_ids)
 
-    if not classifier:
-        # Try to initialize if not ready (e.g. if startup failed or cleared)
-        init_classifier()
-
-    if not classifier:
+    if results is None:
         return templates.TemplateResponse("error.html", {"request": request, "message": "Classifier not initialized. Please ensure there are images in the library."})
 
-    # 结果列表
-    results = []
-
-    for img_id in image_ids:
-        row = db.get_image_by_id(img_id)
-        if not row:
-            continue
-
-        filename = row['filename']
-        file_path = Path(UPLOAD_FOLDER_QUERY) / filename
-        if not file_path.exists():
-            continue
-
-        # 进行预测
-        try:
-            preds = classifier.predict(file_path, topk=5)
-        except Exception as e:
-            print(f"Prediction failed for {filename}: {e}")
-            continue
-
-        # 构建检测结果
-        detections = []
-        image_array = np.array(Image.open(file_path).convert("RGB"))
-
-        for i, p in enumerate(preds):
-            # 每个预测结果包含一个_mask字段，表示检测到的区域掩码
-            mask = p.get("_mask")
-            if mask is not None:
-                # 使用 classifier.py 中的 crop_with_mask 函数裁剪出检测区域的图像
-                from classifier import crop_with_mask, to_uint8_mask
-                cropped, _ = crop_with_mask(image_array, mask)
-
-                # 将裁剪后的图像转换为 base64 编码的字符串，方便在前端直接显示
-                pil_img = Image.fromarray(cropped)
-                buff = BytesIO()
-                pil_img.save(buff, format="PNG")
-                img_str = base64.b64encode(buff.getvalue()).decode("utf-8")
-
-                detections.append({
-                    "id": i,
-                    "crop_b64": img_str,
-                    "predictions": p["predictions"], # list of {name, score}
-                    "top_label": p["predictions"][0]["name"] if p["predictions"] else ""
-                })
-
-        if detections:
-            results.append({
-                "image_id": img_id,
-                "filename": filename,
-                "detections": detections
-            })
 
     return templates.TemplateResponse("review.html", {"request": request, "results": results})
 
