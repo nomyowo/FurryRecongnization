@@ -143,9 +143,9 @@
                         <div class="position-absolute top-0 start-0 p-2" style="z-index: 10;">
                             <input class="form-check-input image-checkbox" type="checkbox" value="{{ image.id }}">
                         </div>
-                        <a href="/files/lib/{{ image.filename }}" target="_blank">
-                            <img src="/files/lib/{{ image.filename }}" class="card-img-top image-card-img" alt="{{ image.filename }}">
-                        </a>
+                            <a href="/files/lib/{{ image.filename }}" target="_blank">
+                                <img src="/thumbnail/lib/{{ image.filename }}" class="card-img-top image-card-img" alt="{{ image.filename }}" loading="lazy">
+                            </a>
                         <div class="card-body p-2">
                             <p class="card-text text-truncate small mb-1" title="{{ image.filename }}">文件名：{{ image.filename }}</p>
                             <small class="text-muted d-block mb-2 text-truncate" style="text-overflow: ellipsis">上传时间：{{ image.timestamp }}</small>

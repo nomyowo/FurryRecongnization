@@ -43,7 +43,7 @@
                             <div class="position-absolute top-0 start-0 p-2" style="z-index: 10;">
                                 <input class="form-check-input image-checkbox high-checkbox" type="checkbox" name="selected_files" value="{{ img.filename }}">
                             </div>
-                            <img src="/files/temp/{{ batch_id }}/{{ img.filename }}" class="card-img-top" style="height: 150px; object-fit: cover;">
+                            <img src="/thumbnail/temp/{{ batch_id }}/{{ img.filename }}" class="card-img-top" style="height: 150px; object-fit: cover;" loading="lazy">
                             <div class="card-body p-2">
                                 <p class="card-text small text-truncate">{{ img.filename }}</p>
                                 <!-- High Conf Info -->
@@ -89,7 +89,7 @@
                             <div class="position-absolute top-0 start-0 p-2" style="z-index: 10;">
                                 <input class="form-check-input image-checkbox other-checkbox" type="checkbox" name="selected_files" value="{{ img.filename }}">
                             </div>
-                            <img src="/files/temp/{{ batch_id }}/{{ img.filename }}" class="card-img-top" style="height: 150px; object-fit: cover;">
+                            <img src="/thumbnail/temp/{{ batch_id }}/{{ img.filename }}" class="card-img-top" style="height: 150px; object-fit: cover;" loading="lazy">
                             <div class="card-body p-2">
                                 <p class="card-text small text-truncate">{{ img.filename }}</p>
                                 <!-- High Conf Info (Hidden initially) -->

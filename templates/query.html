@@ -94,7 +94,7 @@
                                 <input class="form-check-input image-checkbox" type="checkbox" name="image_ids" value="{{ image.id }}">
                             </div>
                             <a href="/files/query/{{ image.filename }}" target="_blank">
-                                <img src="/files/query/{{ image.filename }}" class="card-img-top image-card-img" alt="{{ image.filename }}">
+                                <img src="/thumbnail/query/{{ image.filename }}" class="card-img-top image-card-img" alt="{{ image.filename }}" loading="lazy">
                             </a>
                             <div class="card-body p-2">
                                 <p class="card-text text-truncate small mb-1" title="{{ image.filename }}">文件名：{{ image.filename }}</p>

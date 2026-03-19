@@ -6,7 +6,7 @@ from typing import List, Optional
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, status, Query
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from werkzeug.utils import secure_filename
@@ -31,17 +31,21 @@ classifier: Optional[FurryClassifier] = None
 UPLOAD_FOLDER_LIB = 'lib'
 UPLOAD_FOLDER_QUERY = 'query'
 UPLOAD_FOLDER_TEMP = 'temp'
+UPLOAD_FOLDER_THUMBNAIL = 'thumbnails'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 # 确保上传目录存在
 os.makedirs(UPLOAD_FOLDER_LIB, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER_QUERY, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER_TEMP, exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_FOLDER_THUMBNAIL, 'lib'), exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_FOLDER_THUMBNAIL, 'query'), exist_ok=True)
 
 # 挂载静态文件目录
 app.mount("/files/lib", StaticFiles(directory=UPLOAD_FOLDER_LIB), name="lib_files")
 app.mount("/files/query", StaticFiles(directory=UPLOAD_FOLDER_QUERY), name="query_files")
 app.mount("/files/temp", StaticFiles(directory=UPLOAD_FOLDER_TEMP), name="temp_files")
+app.mount("/files/thumbnail", StaticFiles(directory=UPLOAD_FOLDER_THUMBNAIL), name="thumbnail_files")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -49,6 +53,99 @@ templates = Jinja2Templates(directory="templates")
 def allowed_file(filename: str):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# 获取缩略图，如果不存在则生成
+@app.get("/thumbnail/{image_type}/{filename}")
+def get_thumbnail_route(image_type: str, filename: str):
+    if image_type not in ['lib', 'query']:
+        return "Invalid image type", 400
+
+    # 防止路径遍历
+    filename = secure_filename(filename)
+
+    thumb_dir = os.path.join(UPLOAD_FOLDER_THUMBNAIL, image_type)
+    # Just append .jpg to be safe and simple, avoiding extension replacement logic issues
+    # But wait, if file is .jpg, it becomes .jpg.jpg?
+    # Let's just always append .thumb.jpg to distinguish and ensure .jpg extension
+    thumb_path = os.path.join(thumb_dir, filename + ".jpg")
+
+    # 1. 如果缩略图已存在，直接返回
+    if os.path.exists(thumb_path):
+        return FileResponse(thumb_path)
+
+    # 2. 如果不存在，查找原图
+    if image_type == 'lib':
+        source_dir = UPLOAD_FOLDER_LIB
+    else:
+        source_dir = UPLOAD_FOLDER_QUERY
+
+    source_path = os.path.join(source_dir, filename)
+
+    if not os.path.exists(source_path):
+        # 原图不存在，返回404（或者可以用默认图片替代）
+        # 这里返回None，FastAPI会处理成null响应，或者抛出异常
+         return "Image not found", 404
+
+    # 3. 生成缩略图
+    try:
+        # 打开图片
+        with Image.open(source_path) as img:
+            # 转换为RGB，防止 RGBA 保存为 JPEG 报错
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            # 生成缩略图 (这里固定大小，例如 300x300，保持比例)
+            img.thumbnail((600, 600))
+
+            # 保存为 JPEG (体积小，加载快)
+            # 注意：强制保存为同名文件，但内容可能是JPEG。
+            # 或者，我们可以强制修改后缀，但这会影响文件名的一致性。
+            # 简单起见，我们直接保存到 thumb_path，使用 JPEG 格式，忽略原始扩展名带来的混淆（浏览器通常能通过 header 识别）
+            # 或者保险起见，保留原始格式，但如果为了速度，JPEG 最好。
+            # 让我们尝试保存为 JPEG，质量设为 70
+
+            img.save(thumb_path, format="JPEG", quality=70)
+
+        return FileResponse(thumb_path)
+
+    except Exception as e:
+        print(f"Error generating thumbnail for {filename}: {e}")
+        # 如果生成失败，降级为返回原图
+        return FileResponse(source_path)
+
+# 获取临时缩略图（仅在内存中生成，不保存到文件系统）
+@app.get("/thumbnail/temp/{batch_id}/{filename}")
+def get_temp_thumbnail_route(batch_id: str, filename: str):
+    # 防止路径遍历
+    filename = secure_filename(filename)
+    # Simple validation for batch_id
+    if not all(c.isalnum() or c == '-' for c in batch_id):
+        return "Invalid batch ID", 400
+
+    # 查找原图
+    source_path = os.path.join(UPLOAD_FOLDER_TEMP, batch_id, filename)
+
+    if not os.path.exists(source_path):
+         return "Image not found", 404
+
+    # 生成缩略图 (不保存到本地，直接返回内存数据)
+    try:
+        with Image.open(source_path) as img:
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            img.thumbnail((600, 600))
+
+            # 使用内存缓冲
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=70)
+            buf.seek(0)
+
+            return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+    except Exception as e:
+        print(f"Error generating thumbnail for {filename}: {e}")
+        return FileResponse(source_path)
 
 # 初始化分类器
 def init_classifier():
@@ -221,13 +318,14 @@ def core_detect_images(image_ids: List[int]):
             mask = p.get("_mask")
             if mask is not None:
                 # 使用 classifier.py 中的 crop_with_mask 函数裁剪出检测区域的图像
-                from classifier import crop_with_mask, to_uint8_mask
+                from classifier import crop_with_mask
                 cropped, _ = crop_with_mask(image_array, mask)
 
                 # 将裁剪后的图像转换为 base64 编码的字符串，方便在前端直接显示
                 pil_img = Image.fromarray(cropped)
                 buff = BytesIO()
-                pil_img.save(buff, format="PNG")
+                # Use JPEG for compression, quality 70
+                pil_img.save(buff, format="JPEG", quality=70)
                 img_str = base64.b64encode(buff.getvalue()).decode("utf-8")
 
                 detections.append({
