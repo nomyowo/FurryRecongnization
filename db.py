@@ -1,5 +1,4 @@
 import sqlite3
-import os
 
 # 此处为数据库名称
 DB_NAME = 'database.db'

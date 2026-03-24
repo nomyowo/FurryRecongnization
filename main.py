@@ -19,9 +19,6 @@ from io import BytesIO
 from PIL import Image
 import numpy as np
 
-
-
-# TODO: 图片显示降低清晰度，加快加载速度
 app = FastAPI()
 
 # 分类器
