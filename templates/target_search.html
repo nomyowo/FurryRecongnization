@@ -13,7 +13,7 @@
                  <form action="/target/search" method="post" enctype="multipart/form-data" id="searchForm">
                     <div class="mb-3">
                         <label for="target_label" class="form-label">目标名称 (Target Name)</label>
-                        <input type="text" class="form-control" id="target_label" name="target_label" required placeholder="请输入要查找的兽装/角色名称">
+                        <input type="text" class="form-control" id="target_label" name="target_label" required placeholder="请输入要查找的兽装/角色名称" value="{{ target_label if target_label else '' }}">
                     </div>
                     <div class="mb-3">
                         <label for="files" class="form-label">上传图片 (Upload Images)</label>
@@ -31,14 +31,39 @@
 </div>
 
 <script>
-    document.getElementById('searchForm').addEventListener('submit', function(event) {
-        if (this.checkValidity()) {
-             document.getElementById('loadingOverlay').style.display = 'flex';
-        } else {
-            // Let the browser handle displaying validation errors
-            // event.preventDefault() is NOT called so browser validation UI shows up
+    document.getElementById('searchForm').addEventListener('submit', async function(event) {
+        if (!this.checkValidity()) return;
+        event.preventDefault(); // Stop standard form submission
+
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const labelInput = document.getElementById('target_label').value.trim();
+
+        try {
+            let res = await fetch('/api/check_label?label=' + encodeURIComponent(labelInput));
+            let data = await res.json();
+
+            if (!data.initialized) {
+                hideLoading();
+                if (submitBtn) submitBtn.disabled = false;
+                showGlobalToast("训练图库无类别", "danger");
+                return;
+            }
+
+            if (!data.valid) {
+                hideLoading();
+                if (submitBtn) submitBtn.disabled = false;
+                showGlobalToast("系统内无该类别标签，请至训练图库中添加", "danger");
+                return;
+            }
+
+            showLoading();
+            if (submitBtn) setTimeout(() => submitBtn.disabled = true, 0);
+            this.submit(); // submit actual form
+        } catch (err) {
+            showLoading();
+            if (submitBtn) setTimeout(() => submitBtn.disabled = true, 0);
+            this.submit(); // fallback to normal submission on network error
         }
     });
 </script>
 {% endblock %}
-

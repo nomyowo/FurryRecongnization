@@ -175,7 +175,7 @@ def startup_event():
 # 首页
 @app.get("/")
 def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 # 库管理
 @app.get("/lib")
@@ -190,7 +190,7 @@ def view_lib(request: Request, label: Optional[str] = Query(None)):
     if label is not None:
         images = db.get_lib_images(label)
 
-    return templates.TemplateResponse("lib.html", {"request": request, "images": images, "labels": labels, "current_label": label})
+    return templates.TemplateResponse(request, "lib.html", {"images": images, "labels": labels, "current_label": label})
 
 
 # 上传库图片
@@ -268,7 +268,7 @@ def view_query(request: Request, label: Optional[str] = Query(None)):
     if label is not None:
         images = db.get_query_images(label)
 
-    return templates.TemplateResponse("query.html", {"request": request, "images": images, "labels": labels, "current_label": label})
+    return templates.TemplateResponse(request, "query.html", {"images": images, "labels": labels, "current_label": label})
 
 
 # 核心检测逻辑
@@ -377,8 +377,14 @@ def upload_query(
     if uploaded_ids:
         results = core_detect_images(uploaded_ids)
         if results is not None:
-             return templates.TemplateResponse("review.html", {"request": request, "results": results})
-        # 如果classifier未初始化，或者没有结果，则返回query页面
+             return templates.TemplateResponse(request, "review.html", {"results": results})
+        else:
+             return templates.TemplateResponse(request, "query.html", {
+                 "labels": db.get_query_labels_stats(), 
+                 "current_label": None,
+                 "images": [],
+                 "error_message": "训练图库无类别"
+             })
 
     return RedirectResponse(url="/query", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -413,14 +419,24 @@ def update_label(
 def detect_query_images(
     request: Request,
     image_ids: List[int] = Form(...),
+    current_label: Optional[str] = Form(None),
 ):
     results = core_detect_images(image_ids)
 
     if results is None:
-        return templates.TemplateResponse("error.html", {"request": request, "message": "Classifier not initialized. Please ensure there are images in the library."})
+        images = []
+        if current_label is not None:
+            images = db.get_query_images(current_label)
+        
+        return templates.TemplateResponse(request, "query.html", {
+            "labels": db.get_query_labels_stats(), 
+            "current_label": current_label,
+            "images": images,
+            "error_message": "训练图库无类别"
+        })
 
 
-    return templates.TemplateResponse("review.html", {"request": request, "results": results})
+    return templates.TemplateResponse(request, "review.html", {"results": results})
 
 
 # 保存用户审核的标签结果
@@ -517,7 +533,22 @@ def download_query_label(label: str = Query(...)):
 
 @app.get("/target")
 def target_search(request: Request):
-    return templates.TemplateResponse("target_search.html", {"request": request})
+    return templates.TemplateResponse(request, "target_search.html")
+
+
+@app.get("/api/check_label")
+def api_check_label(label: str = Query(...)):
+    global classifier
+    if not classifier:
+        init_classifier()
+        if not classifier:
+            return {"initialized": False, "valid": False}
+    
+    valid_labels = [item['label'] for item in db.get_lib_labels_stats()]
+    if label not in valid_labels:
+        return {"initialized": True, "valid": False}
+        
+    return {"initialized": True, "valid": True}
 
 
 @app.post("/target/search")
@@ -531,7 +562,12 @@ async def target_search_process(
     if not classifier:
         init_classifier()
         if not classifier:
-             return templates.TemplateResponse("error.html", {"request": request, "message": "Classifier not initialized. Please ensure there are images in the library."})
+             return templates.TemplateResponse(request, "target_search.html", {"error_message": "训练图库无类别", "target_label": target_label})
+
+    # Check if target_label exists in the library
+    valid_labels = [item['label'] for item in db.get_lib_labels_stats()]
+    if target_label not in valid_labels:
+        return templates.TemplateResponse(request, "target_search.html", {"error_message": "系统内无该类别标签，请至训练图库中添加", "target_label": target_label})
 
     batch_id = str(uuid.uuid4())
     batch_dir = os.path.join(UPLOAD_FOLDER_TEMP, batch_id)
@@ -600,8 +636,7 @@ async def target_search_process(
     high_conf_images.sort(key=lambda x: x["target_score"], reverse=True)
     other_images.sort(key=lambda x: x["target_score"], reverse=True)
 
-    return templates.TemplateResponse("target_result.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "target_result.html", {
         "batch_id": batch_id,
         "target_label": target_label,
         "high_conf_images": high_conf_images,

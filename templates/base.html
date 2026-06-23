@@ -37,6 +37,29 @@
     <div class="mt-3 text-primary fw-bold">Processing... Please wait.</div>
 </div>
 
+<!-- 用户须知弹窗 -->
+<div class="modal fade" id="disclaimerModal" tabindex="-1" aria-labelledby="disclaimerModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="disclaimerModalLabel">用户须知</h5>
+            </div>
+            <div class="modal-body">
+                <p>欢迎使用本系统。在使用前，请您阅读并同意以下条款：</p>
+                <ul>
+                    <li>使用本系统即表示您<strong>默认授权本系统保存并使用您上传的照片</strong>，用于图像识别、分类及相关功能。</li>
+                    <li>系统内的所有照片<strong>仅限在本系统范围内使用，不允许随意传播、转发或对外公开</strong>。</li>
+                    <li>请勿利用本系统进行任何侵犯他人隐私或违反法律法规的行为。</li>
+                </ul>
+                <p class="mb-0">点击"我已阅读并同意"即表示您接受以上全部条款。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="disclaimerAgreeBtn">我已阅读并同意</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 rounded">
     <div class="container-fluid">
         <a class="navbar-brand" href="/">Furry图像识别分类系统</a>
@@ -62,12 +85,61 @@
     </div>
 </nav>
 
-<div class="container">
+<div class="container" style="padding-bottom: 80px;">
     {% block content %}{% endblock %}
+</div>
+
+<!-- Footer for ICP and Public Security Filings -->
+<footer class="text-center text-muted w-100" style="font-size: 0.85rem; margin-top: auto; padding: 20px 0;">
+    <div class="container border-top pt-3">
+        <a href="https://beian.miit.gov.cn/" target="_blank" class="text-decoration-none text-muted me-3">京ICP备2026035588号</a>
+        <a href="https://www.beian.gov.cn/portal/registerSystemInfo?recordcode=11010502061389" target="_blank" class="text-decoration-none text-muted">
+            <i class="bi bi-shield-check text-primary"></i> 京公网安备11010502061389号
+        </a>
+    </div>
+</footer>
+
+<div id="toastContainer" class="toast-container position-fixed top-0 start-50 translate-middle-x p-3 text-center" style="z-index: 1055; width: auto; min-width: 300px;">
+    {% if error_message %}
+    <div id="errorToast" class="toast align-items-center text-white bg-danger border-0" style="opacity: 0.8 !important; backdrop-filter: blur(4px);" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="4000">
+        <div class="d-flex justify-content-center">
+            <div class="toast-body fw-bold fs-6">
+                {{ error_message }}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    function showGlobalToast(message, type='danger') {
+        let container = document.getElementById('toastContainer');
+        const toastId = 'toast_' + Date.now() + Math.random().toString(36).substr(2, 5);
+        const html = `
+            <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" style="opacity: 0.8 !important; backdrop-filter: blur(4px);" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="4000">
+                <div class="d-flex justify-content-center">
+                    <div class="toast-body fw-bold fs-6">${message}</div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+        const el = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(el);
+        toast.show();
+        el.addEventListener('hidden.bs.toast', () => el.remove());
+    }
+
+    {% if error_message %}
+    document.addEventListener('DOMContentLoaded', function() {
+        var toastEl = document.getElementById('errorToast');
+        if (toastEl) {
+            var toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+    });
+    {% endif %}
+
     function showLoading() {
         document.getElementById('loadingOverlay').style.display = 'flex';
     }
@@ -75,6 +147,18 @@
     function hideLoading() {
         document.getElementById('loadingOverlay').style.display = 'none';
     }
+
+    // 用户须知弹窗：每个浏览会话仅在首次打开时显示一次
+    document.addEventListener('DOMContentLoaded', function() {
+        if (!sessionStorage.getItem('disclaimerAgreed')) {
+            var disclaimerModal = new bootstrap.Modal(document.getElementById('disclaimerModal'));
+            disclaimerModal.show();
+            document.getElementById('disclaimerAgreeBtn').addEventListener('click', function() {
+                sessionStorage.setItem('disclaimerAgreed', '1');
+                disclaimerModal.hide();
+            });
+        }
+    });
 
     // Attach to all forms
     document.addEventListener('DOMContentLoaded', function() {
