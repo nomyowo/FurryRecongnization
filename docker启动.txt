@@ -1,0 +1,45 @@
+说明：程序在容器内把上传图片统一存到 /user 目录（lib、query、temp、thumbnails 四个子目录会自动创建），
+只需要把宿主机的一个目录挂载到 /user 即可。
+database.db 需提前存在，否则 docker 会把它建成目录。
+
+Linux（把 /home/ubuntu/furry-data 换成你想存数据的目录）
+
+mkdir -p /home/ubuntu/furry-data && touch /home/ubuntu/furry-data/database.db
+
+docker run -d -p 5000:5000 \
+  -v /home/ubuntu/furry-data:/user \
+  -v /home/ubuntu/furry-data/database.db:/app/database.db \
+  my-python-web
+
+Windows（PowerShell）
+
+docker run -d -p 5000:5000 `
+  -v D:\Code\FurryRecongnization\data:/user `
+  -v D:\Code\FurryRecongnization\database.db:/app/database.db `
+  my-python-web
+
+或者直接用 docker-compose（推荐，数据默认存到当前目录的 data/ 下）：
+
+docker compose up -d
+
+构建镜像
+
+docker build -t my-python-web .
+
+导出/导入镜像
+
+docker save -o myproject.tar my-python-web
+
+docker load -i myproject.tar
+
+删除镜像（Linux；镜像被容器占用时需先停止并删除容器）
+
+docker ps -a
+
+docker stop <容器ID> && docker rm <容器ID>
+
+docker rmi my-python-web
+
+清理所有未被使用的悬空镜像（可选）
+
+docker image prune -f

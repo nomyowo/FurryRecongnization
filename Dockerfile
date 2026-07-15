@@ -17,9 +17,13 @@ COPY requirements.txt .
 
 
 
-RUN echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
- && echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
- && echo "deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+# 基础镜像的 apt 源在 /etc/apt/sources.list.d/debian.sources（指向 deb.debian.org），
+# 必须先删掉，否则 apt-get update 仍会连接官方源。
+# 清华源（mirrors.tuna）对部分网络返回 403，改用阿里云镜像
+RUN rm -f /etc/apt/sources.list.d/*.sources \
+ && echo "deb https://mirrors.aliyun.com/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+ && echo "deb https://mirrors.aliyun.com/debian bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+ && echo "deb https://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
 && apt-get update \
  && apt-get install -y --no-install-recommends \
     libgl1 \
